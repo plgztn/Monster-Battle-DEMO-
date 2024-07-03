@@ -1,8 +1,8 @@
-import pygame
 import os
 import tkinter as tk
 from tkinter import simpledialog, filedialog
 import random
+import pygame
 
 # Hàm khởi tạo màn hình nhập liệu với tkinter
 def get_monster_attributes():
@@ -19,9 +19,9 @@ def get_monster_attributes():
     monster2_ultimate_multiplier = simpledialog.askinteger("Input", "Nhập hệ số sát thương tuyệt chiêu cho quái vật 2:", minvalue=1, maxvalue=100)
 
     # Lựa chọn hình ảnh cho quái vật 1
-    monster1_image = filedialog.askopenfilename(initialdir="images", title="Chọn hình ảnh cho quái vật 1", filetypes=(("Image files", ".jpg *.png"), ("all files", ".*")))
+    monster1_image = filedialog.askopenfilename(initialdir="images", title="Chọn hình ảnh cho quái vật 1", filetypes=(("Image files", "*.jpg *.png"), ("all files", "*.*")))
     # Lựa chọn hình ảnh cho quái vật 2
-    monster2_image = filedialog.askopenfilename(initialdir="images", title="Chọn hình ảnh cho quái vật 2", filetypes=(("Image files", ".jpg *.png"), ("all files", ".*")))
+    monster2_image = filedialog.askopenfilename(initialdir="images", title="Chọn hình ảnh cho quái vật 2", filetypes=(("Image files", "*.jpg *.png"), ("all files", "*.*")))
 
     return monster1_health, monster1_damage, monster1_ultimate_multiplier, monster1_image, monster2_health, monster2_damage, monster2_ultimate_multiplier, monster2_image
 
@@ -90,6 +90,7 @@ class Monster:
         self.damage_text = ""
         self.attack_count = 0  # Bộ đếm số lần tấn công
         self.ultimate_count = 0  # Bộ đếm số lần dùng tuyệt chiêu
+        self.win_count = 0  # Bộ đếm số lần thắng
         self.start_time = pygame.time.get_ticks()  # Thời điểm bắt đầu game
         self.is_ultimate_attacking = False
         self.ultimate_effect_start_time = 0
@@ -107,6 +108,8 @@ class Monster:
         draw_text(f"Attacks: {self.attack_count}", health_font, BLACK, surface, self.rect.x, self.rect.y + self.rect.height + 30)
         # Vẽ bộ đếm số lần dùng tuyệt chiêu
         draw_text(f"Ultimates: {self.ultimate_count}", health_font, BLACK, surface, self.rect.x, self.rect.y + self.rect.height + 50)
+        # Vẽ bộ đếm số lần thắng
+        draw_text(f"Wins: {self.win_count}", health_font, BLACK, surface, self.rect.x, self.rect.y + self.rect.height + 70)
         # Vẽ thông báo sát thương
         if self.damage_text:
             if self.name == "Monster 1":
@@ -123,7 +126,7 @@ class Monster:
         if self.is_ultimate_attacking:
             current_time = pygame.time.get_ticks()
             if current_time - self.ultimate_effect_start_time < 500:  # Hiệu ứng kéo dài 500ms
-                effect_radius = 200 + (current_time - self.ultimate_effect_start_time) // 5
+                effect_radius = 150 + (current_time - self.ultimate_effect_start_time) // 5
                 pygame.draw.circle(surface, YELLOW, (self.rect.centerx, self.rect.centery), effect_radius, 5)
             else:
                 self.is_ultimate_attacking = False
@@ -138,112 +141,72 @@ class Monster:
         # Hiển thị sát thương và tự động xóa sau 2 giây
         self.damage_text = f"{self.name} attacked {other.name} dealt {damage_dealt} damage!"
         pygame.time.set_timer(pygame.USEREVENT, 2500)  # Tạo sự kiện đếm thời gian
-        self.attack_count += 1  # Tăng bộ đếm số lần tấn công
+        self.attack_count += 1
+        pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  # Xóa thông báo sát thương sau 2 giây
 
     def ultimate_attack(self, other):
-        # Tính toán sát thương ngẫu nhiên từ 1 đến hệ số người dùng nhập
-        damage_multiplier = random.randint(1, self.ultimate_multiplier)
-        damage_dealt = self.damage * damage_multiplier
-        # Áp dụng sát thương lên quái vật khác
+        damage_dealt = self.damage * self.ultimate_multiplier
         other.health -= damage_dealt
         if other.health < 0:
             other.health = 0
         # Phát âm thanh tuyệt chiêu
         ultimate_attack_sound.play()
         # Hiển thị sát thương và tự động xóa sau 2 giây
-        self.damage_text = f"{self.name} Use Ultimate {damage_dealt} Damaged (x{damage_multiplier}) On {other.name}!"
-        pygame.time.set_timer(pygame.USEREVENT, 2000)  # Tạo sự kiện đếm thời gian
-        self.ultimate_count += 1  # Tăng bộ đếm số lần dùng tuyệt chiêu
-        # Kích hoạt hiệu ứng tấn công Tuyệt Kĩ
+        self.damage_text = f"{self.name} đã tấn công tuyệt chiêu!"
+        self.ultimate_count += 1
         self.is_ultimate_attacking = True
         self.ultimate_effect_start_time = pygame.time.get_ticks()
-        self.attack_count = 0
+        pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  # Xóa thông báo sát thương sau 2 giây
 
-    def heal(self, amount):
-        self.health += amount
-        if self.health > self.max_health:
-            self.health = self.max_health
+    def reset(self):
+        self.health = self.max_health
+        self.attack_count = 0
+        self.ultimate_count = 0
 
 def main():
-    show_buttons = False  # Ẩn nút "Chơi lại" và "Kết thúc" khi game bắt đầu
-    game_over = False  # Trạng thái game over
-    # Nhập lượng máu và sát thương từ người chơi
+    # Lấy các thuộc tính cho hai quái vật từ người dùng
     monster1_health, monster1_damage, monster1_ultimate_multiplier, monster1_image, monster2_health, monster2_damage, monster2_ultimate_multiplier, monster2_image = get_monster_attributes()
 
-    # Khởi tạo quái vật với lượng máu và sát thương người chơi nhập
-    monster1 = Monster("Monster 1", monster1_image, 150, SCREEN_HEIGHT // 2, monster1_health, monster1_damage, monster1_ultimate_multiplier)
-    monster2 = Monster("Monster 2", monster2_image, SCREEN_WIDTH - 200, SCREEN_HEIGHT // 2, monster2_health, monster2_damage, monster2_ultimate_multiplier)
+    # Tạo đối tượng quái vật
+    monster1 = Monster("Quái vật 1", monster1_image, 200, 400, monster1_health, monster1_damage, monster1_ultimate_multiplier)
+    monster2 = Monster("Quái vật 2", monster2_image, 900, 400, monster2_health, monster2_damage, monster2_ultimate_multiplier)
 
-    # Phát nhạc nền và giảm âm lượng xuống 50%
-    pygame.mixer.music.load('byte-blast-8-bit-arcade-music-background-music-for-video-208780.mp3')
-    pygame.mixer.music.set_volume(0.2)  # Giảm âm lượng xuống 50%
-    pygame.mixer.music.play(-1)  # Phát lặp lại vô hạn
-
+    # Vòng lặp chính
     running = True
+    turn = 0  # Lượt tấn công của quái vật
     clock = pygame.time.Clock()
 
     while running:
-        screen.fill(WHITE)
-
+        # Xử lý sự kiện
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_a:
-                    monster1.attack(monster2)
-                if event.key == pygame.K_l:
-                    monster2.attack(monster1)
-                if event.key == pygame.K_SPACE:  # Kích hoạt Tuyệt chiêu cho quái vật 1
-                    monster1.ultimate_attack(monster2)
-                if event.key == pygame.K_RETURN:  # Kích hoạt Tuyệt chiêu cho quái vật 2
-                    monster2.ultimate_attack(monster1)
-                if event.key == pygame.K_s:  # Hồi máu cho quái vật 1
-                    heal_amount = simpledialog.askinteger("Input", "Nhập lượng máu hồi phục cho quái vật 1:", minvalue=1, maxvalue=100000)
-                    if heal_amount:
-                        monster1.heal(heal_amount)
-                if event.key == pygame.K_k:  # Hồi máu cho quái vật 2
-                    heal_amount = simpledialog.askinteger("Input", "Nhập lượng máu hồi phục cho quái vật 2:", minvalue=1, maxvalue=100000)
-                    if heal_amount:
-                        monster2.heal(heal_amount)
-            if event.type == pygame.USEREVENT:  # Xóa thông báo sát thương sau 2 giây
-                monster1.damage_text = ""
-                monster2.damage_text = ""
+                if event.key == pygame.K_SPACE:
+                    if turn % 2 == 0:  # Lượt của quái vật 1
+                        monster1.attack(monster2)
+                    else:  # Lượt của quái vật 2
+                        monster2.attack(monster1)
+                    turn += 1
+                elif event.key == pygame.K_u:
+                    if turn % 2 == 0:  # Lượt của quái vật 1
+                        monster1.ultimate_attack(monster2)
+                    else:  # Lượt của quái vật 2
+                        monster2.ultimate_attack(monster1)
+                    turn += 1
+            if event.type == pygame.USEREVENT + 1:
+                monster1.damage_text = ""  # Xóa thông báo sát thương
+                monster2.damage_text = ""  # Xóa thông báo sát thương
 
-            if event.type == pygame.KEYUP:
-                if event.key == pygame.K_a or event.key == pygame.K_l or event.key == pygame.K_SPACE or event.key == pygame.K_RETURN or event.key == pygame.K_s or event.key == pygame.K_k:
-                    if monster1.health <= 0 or monster2.health <= 0:
-                        show_buttons = True
-            # Xử lý sự kiện khi click chuột
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if show_buttons:
-                    mouse_pos = pygame.mouse.get_pos()
-                    # Nếu người chơi nhấp vào nút "Chơi lại"
-                    if play_again_button_rect.collidepoint(mouse_pos):
-                        game_over = False
-                        show_buttons = False
-                        main()
-                    # Nếu người chơi nhấp vào nút "Kết thúc"
-                    elif quit_button_rect.collidepoint(mouse_pos):
-                        running = False
+        # Vẽ các đối tượng lên màn hình
+        screen.fill(WHITE)
         monster1.draw(screen)
         monster2.draw(screen)
-        # Vẽ chữ "VS" ở giữa hai quái vật
-        draw_text("VS", font, RED, screen, SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2)
-
-        if monster1.health <= 0 or monster2.health <= 0:
-            game_over = True
-
-        if game_over and show_buttons:
-            # Vẽ nút "Chơi lại"
-            play_again_button_rect = pygame.draw.rect(screen, RED, (SCREEN_WIDTH // 2 - 110, SCREEN_HEIGHT // 2 + 50, 200, 50))
-            draw_text("Play Again", font, WHITE, screen, SCREEN_WIDTH // 2 - 110, SCREEN_HEIGHT // 2 + 60)
-
-            # Vẽ nút "Kết thúc"
-            quit_button_rect = pygame.draw.rect(screen, RED, (SCREEN_WIDTH // 2 - 110, SCREEN_HEIGHT // 2 + 120, 200, 50))
-            draw_text("End.", font, WHITE, screen, SCREEN_WIDTH // 2 - 110, SCREEN_HEIGHT // 2 + 130)
         pygame.display.flip()
-        clock.tick(30)  # Giới hạn frame rate
+        clock.tick(60)  # Giới hạn frames per second
 
     pygame.quit()
+
 if __name__ == "__main__":
     main()
+
